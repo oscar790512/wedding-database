@@ -40,3 +40,11 @@ CREATE TABLE IF NOT EXISTS admin_users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users (username);
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security (RLS)
+-- FastAPI 後端使用 service_role key 存取，會 bypass RLS。
+-- 啟用 RLS 可阻擋 anon / authenticated 透過 PostgREST 直接讀寫資料表。
+-- ---------------------------------------------------------------------------
+ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
