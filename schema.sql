@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS guests (
                     CHECK (status IN ('attend', 'decline', 'undecided')),
   total_adults    INTEGER NOT NULL DEFAULT 0 CHECK (total_adults >= 0),
   total_children  INTEGER NOT NULL DEFAULT 0 CHECK (total_children >= 0),
+  child_seats     INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0),
   diet_notes      TEXT,
   need_invitation BOOLEAN NOT NULL DEFAULT FALSE,
   invitation_address TEXT,
@@ -66,3 +67,4 @@ BEGIN
 END $$;
 
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_address TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS child_seats INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0);
