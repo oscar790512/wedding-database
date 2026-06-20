@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS guests (
   total_adults    INTEGER NOT NULL DEFAULT 0 CHECK (total_adults >= 0),
   total_children  INTEGER NOT NULL DEFAULT 0 CHECK (total_children >= 0),
   diet_notes      TEXT,
-  need_cake       BOOLEAN NOT NULL DEFAULT FALSE,
+  need_invitation BOOLEAN NOT NULL DEFAULT FALSE,
+  invitation_address TEXT,
   blessing_message TEXT,
   is_arrived      BOOLEAN NOT NULL DEFAULT FALSE,
   gift_amount     NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (gift_amount >= 0),
@@ -48,3 +49,20 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users (username);
 -- ---------------------------------------------------------------------------
 ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+
+-- ---------------------------------------------------------------------------
+-- Migration: need_cake -> need_invitation + invitation_address
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'guests'
+      AND column_name = 'need_cake'
+  ) THEN
+    ALTER TABLE guests RENAME COLUMN need_cake TO need_invitation;
+  END IF;
+END $$;
+
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_address TEXT;
