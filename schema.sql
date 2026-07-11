@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS guests (
                     CHECK (status IN ('attend', 'decline', 'undecided')),
   total_adults    INTEGER NOT NULL DEFAULT 0 CHECK (total_adults >= 0),
   total_children  INTEGER NOT NULL DEFAULT 0 CHECK (total_children >= 0),
+  actual_adults   INTEGER CHECK (actual_adults IS NULL OR actual_adults >= 0),
+  actual_children INTEGER CHECK (actual_children IS NULL OR actual_children >= 0),
   child_seats     INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0),
   diet_notes      TEXT,
   need_invitation BOOLEAN NOT NULL DEFAULT FALSE,
@@ -94,6 +96,8 @@ END $$;
 
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_address TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS child_seats INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS actual_adults INTEGER CHECK (actual_adults IS NULL OR actual_adults >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS actual_children INTEGER CHECK (actual_children IS NULL OR actual_children >= 0);
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS decline_response TEXT CHECK (
   decline_response IS NULL
   OR decline_response IN ('blessing_only', 'request_cake')
