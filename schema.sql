@@ -18,7 +18,10 @@ CREATE TABLE IF NOT EXISTS guests (
   diet_notes      TEXT,
   need_invitation BOOLEAN NOT NULL DEFAULT FALSE,
   invitation_address TEXT,
-  will_send_gift  BOOLEAN NOT NULL DEFAULT FALSE,
+  decline_response TEXT CHECK (
+    decline_response IS NULL
+    OR decline_response IN ('blessing_only', 'request_cake')
+  ),
   blessing_message TEXT,
   is_arrived      BOOLEAN NOT NULL DEFAULT FALSE,
   gift_amount     NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (gift_amount >= 0),
@@ -69,4 +72,7 @@ END $$;
 
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_address TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS child_seats INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0);
-ALTER TABLE guests ADD COLUMN IF NOT EXISTS will_send_gift BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS decline_response TEXT CHECK (
+  decline_response IS NULL
+  OR decline_response IN ('blessing_only', 'request_cake')
+);
