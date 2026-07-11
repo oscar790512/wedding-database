@@ -60,12 +60,22 @@ CREATE TABLE IF NOT EXISTS admin_users (
 CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users (username);
 
 -- ---------------------------------------------------------------------------
+-- table_settings: 桌次容量設定
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS table_settings (
+  table_name TEXT PRIMARY KEY,
+  capacity   INTEGER NOT NULL DEFAULT 12 CHECK (capacity > 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
 -- Row Level Security (RLS)
 -- FastAPI 後端使用 service_role key 存取，會 bypass RLS。
 -- 啟用 RLS 可阻擋 anon / authenticated 透過 PostgREST 直接讀寫資料表。
 -- ---------------------------------------------------------------------------
 ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE table_settings ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
 -- Migration: need_cake -> need_invitation + invitation_address
@@ -102,6 +112,22 @@ ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_date DATE;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS tracking_no TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+UPDATE guests
+SET shipping_address = invitation_address
+WHERE status = 'decline'
+  AND decline_response = 'request_cake'
+  AND shipping_address IS NULL
+  AND invitation_address IS NOT NULL;
+
+UPDATE guests
+SET cake_status = CASE
+  WHEN shipping_address IS NULL THEN 'pending_address'
+  ELSE 'pending_send'
+END
+WHERE status = 'decline'
+  AND decline_response = 'request_cake'
+  AND cake_status = 'not_required';
 
 CREATE INDEX IF NOT EXISTS idx_guests_guest_category ON guests (guest_category);
 CREATE INDEX IF NOT EXISTS idx_guests_allocated_table ON guests (allocated_table);
