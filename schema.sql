@@ -113,6 +113,7 @@ ALTER TABLE guests ADD COLUMN IF NOT EXISTS decline_response TEXT CHECK (
   decline_response IS NULL
   OR decline_response IN ('blessing_only', 'request_cake')
 );
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS blessing_message TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS guest_category TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_status TEXT NOT NULL DEFAULT 'not_required' CHECK (
   invitation_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'received')
@@ -125,6 +126,10 @@ ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_phone TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_address TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_date DATE;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS tracking_no TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS is_arrived BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS gift_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (gift_amount >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS allocated_table TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS admin_notes TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
