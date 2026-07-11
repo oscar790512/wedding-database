@@ -10,12 +10,17 @@ CREATE TABLE IF NOT EXISTS guests (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name            TEXT NOT NULL,
   phone           TEXT NOT NULL,
+  email           TEXT,
   status          TEXT NOT NULL DEFAULT 'undecided'
                     CHECK (status IN ('attend', 'decline', 'undecided')),
   total_adults    INTEGER NOT NULL DEFAULT 0 CHECK (total_adults >= 0),
   total_children  INTEGER NOT NULL DEFAULT 0 CHECK (total_children >= 0),
   actual_adults   INTEGER CHECK (actual_adults IS NULL OR actual_adults >= 0),
   actual_children INTEGER CHECK (actual_children IS NULL OR actual_children >= 0),
+  vegetarian_count INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_count >= 0),
+  vegetarian_adults INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_adults >= 0),
+  vegetarian_children INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_children >= 0),
+  allergy_notes   TEXT,
   child_seats     INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0),
   diet_notes      TEXT,
   need_invitation BOOLEAN NOT NULL DEFAULT FALSE,
@@ -45,6 +50,7 @@ CREATE TABLE IF NOT EXISTS guests (
 );
 
 CREATE INDEX IF NOT EXISTS idx_guests_phone ON guests (phone);
+CREATE INDEX IF NOT EXISTS idx_guests_email ON guests (email);
 CREATE INDEX IF NOT EXISTS idx_guests_name ON guests (name);
 CREATE INDEX IF NOT EXISTS idx_guests_status ON guests (status);
 
@@ -95,9 +101,14 @@ BEGIN
 END $$;
 
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_address TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS child_seats INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0);
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS actual_adults INTEGER CHECK (actual_adults IS NULL OR actual_adults >= 0);
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS actual_children INTEGER CHECK (actual_children IS NULL OR actual_children >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS vegetarian_count INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_count >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS vegetarian_adults INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_adults >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS vegetarian_children INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_children >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS allergy_notes TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS decline_response TEXT CHECK (
   decline_response IS NULL
   OR decline_response IN ('blessing_only', 'request_cake')
@@ -133,7 +144,13 @@ WHERE status = 'decline'
   AND decline_response = 'request_cake'
   AND cake_status = 'not_required';
 
+UPDATE guests
+SET vegetarian_count = vegetarian_adults + vegetarian_children
+WHERE vegetarian_count = 0
+  AND (vegetarian_adults > 0 OR vegetarian_children > 0);
+
 CREATE INDEX IF NOT EXISTS idx_guests_guest_category ON guests (guest_category);
+CREATE INDEX IF NOT EXISTS idx_guests_email ON guests (email);
 CREATE INDEX IF NOT EXISTS idx_guests_allocated_table ON guests (allocated_table);
 CREATE INDEX IF NOT EXISTS idx_guests_invitation_status ON guests (invitation_status);
 CREATE INDEX IF NOT EXISTS idx_guests_cake_status ON guests (cake_status);
