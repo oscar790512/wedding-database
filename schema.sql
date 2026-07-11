@@ -50,7 +50,6 @@ CREATE TABLE IF NOT EXISTS guests (
 );
 
 CREATE INDEX IF NOT EXISTS idx_guests_phone ON guests (phone);
-CREATE INDEX IF NOT EXISTS idx_guests_email ON guests (email);
 CREATE INDEX IF NOT EXISTS idx_guests_name ON guests (name);
 CREATE INDEX IF NOT EXISTS idx_guests_status ON guests (status);
 
