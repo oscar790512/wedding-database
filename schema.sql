@@ -23,16 +23,33 @@ CREATE TABLE IF NOT EXISTS guests (
     OR decline_response IN ('blessing_only', 'request_cake')
   ),
   blessing_message TEXT,
+  guest_category  TEXT,
+  invitation_status TEXT NOT NULL DEFAULT 'not_required'
+                    CHECK (invitation_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'received')),
+  cake_status     TEXT NOT NULL DEFAULT 'not_required'
+                    CHECK (cake_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'pickup')),
+  shipping_recipient TEXT,
+  shipping_phone  TEXT,
+  shipping_address TEXT,
+  shipping_date   DATE,
+  tracking_no     TEXT,
   is_arrived      BOOLEAN NOT NULL DEFAULT FALSE,
   gift_amount     NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (gift_amount >= 0),
   allocated_table TEXT,
   admin_notes     TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at      TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_guests_phone ON guests (phone);
 CREATE INDEX IF NOT EXISTS idx_guests_name ON guests (name);
 CREATE INDEX IF NOT EXISTS idx_guests_status ON guests (status);
+CREATE INDEX IF NOT EXISTS idx_guests_guest_category ON guests (guest_category);
+CREATE INDEX IF NOT EXISTS idx_guests_allocated_table ON guests (allocated_table);
+CREATE INDEX IF NOT EXISTS idx_guests_invitation_status ON guests (invitation_status);
+CREATE INDEX IF NOT EXISTS idx_guests_cake_status ON guests (cake_status);
+CREATE INDEX IF NOT EXISTS idx_guests_deleted_at ON guests (deleted_at);
 
 -- ---------------------------------------------------------------------------
 -- admin_users: 管理端登入帳號
@@ -76,3 +93,23 @@ ALTER TABLE guests ADD COLUMN IF NOT EXISTS decline_response TEXT CHECK (
   decline_response IS NULL
   OR decline_response IN ('blessing_only', 'request_cake')
 );
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS guest_category TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_status TEXT NOT NULL DEFAULT 'not_required' CHECK (
+  invitation_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'received')
+);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS cake_status TEXT NOT NULL DEFAULT 'not_required' CHECK (
+  cake_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'pickup')
+);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_recipient TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_phone TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_address TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_date DATE;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS tracking_no TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_guests_guest_category ON guests (guest_category);
+CREATE INDEX IF NOT EXISTS idx_guests_allocated_table ON guests (allocated_table);
+CREATE INDEX IF NOT EXISTS idx_guests_invitation_status ON guests (invitation_status);
+CREATE INDEX IF NOT EXISTS idx_guests_cake_status ON guests (cake_status);
+CREATE INDEX IF NOT EXISTS idx_guests_deleted_at ON guests (deleted_at);
