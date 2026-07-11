@@ -45,11 +45,6 @@ CREATE TABLE IF NOT EXISTS guests (
 CREATE INDEX IF NOT EXISTS idx_guests_phone ON guests (phone);
 CREATE INDEX IF NOT EXISTS idx_guests_name ON guests (name);
 CREATE INDEX IF NOT EXISTS idx_guests_status ON guests (status);
-CREATE INDEX IF NOT EXISTS idx_guests_guest_category ON guests (guest_category);
-CREATE INDEX IF NOT EXISTS idx_guests_allocated_table ON guests (allocated_table);
-CREATE INDEX IF NOT EXISTS idx_guests_invitation_status ON guests (invitation_status);
-CREATE INDEX IF NOT EXISTS idx_guests_cake_status ON guests (cake_status);
-CREATE INDEX IF NOT EXISTS idx_guests_deleted_at ON guests (deleted_at);
 
 -- ---------------------------------------------------------------------------
 -- admin_users: 管理端登入帳號
