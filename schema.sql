@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS guests (
   invitation_status TEXT NOT NULL DEFAULT 'not_required'
                     CHECK (invitation_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'received')),
   cake_status     TEXT NOT NULL DEFAULT 'not_required'
-                    CHECK (cake_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'pickup')),
+                    CHECK (cake_status IN ('not_required', 'pending_pickup', 'pending_address', 'pending_send', 'sent', 'pickup')),
   shipping_recipient TEXT,
   shipping_phone  TEXT,
   shipping_address TEXT,
@@ -125,8 +125,10 @@ ALTER TABLE guests ADD COLUMN IF NOT EXISTS guest_category TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_status TEXT NOT NULL DEFAULT 'not_required' CHECK (
   invitation_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'received')
 );
-ALTER TABLE guests ADD COLUMN IF NOT EXISTS cake_status TEXT NOT NULL DEFAULT 'not_required' CHECK (
-  cake_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'pickup')
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS cake_status TEXT NOT NULL DEFAULT 'not_required';
+ALTER TABLE guests DROP CONSTRAINT IF EXISTS guests_cake_status_check;
+ALTER TABLE guests ADD CONSTRAINT guests_cake_status_check CHECK (
+  cake_status IN ('not_required', 'pending_pickup', 'pending_address', 'pending_send', 'sent', 'pickup')
 );
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_recipient TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_phone TEXT;
@@ -154,6 +156,11 @@ SET cake_status = CASE
 END
 WHERE status = 'decline'
   AND decline_response = 'request_cake'
+  AND cake_status = 'not_required';
+
+UPDATE guests
+SET cake_status = 'pending_pickup'
+WHERE status = 'attend'
   AND cake_status = 'not_required';
 
 UPDATE guests
