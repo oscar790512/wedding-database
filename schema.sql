@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS guests (
   shipping_date   DATE,
   tracking_no     TEXT,
   is_arrived      BOOLEAN NOT NULL DEFAULT FALSE,
+  arrived_at      TIMESTAMPTZ,
+  checkin_updated_at TIMESTAMPTZ,
+  checkin_note    TEXT,
+  checkin_token   TEXT UNIQUE,
+  checkin_token_rotated_at TIMESTAMPTZ,
   gift_amount     NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (gift_amount >= 0),
   allocated_table TEXT,
   admin_notes     TEXT,
@@ -136,6 +141,11 @@ ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_address TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_date DATE;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS tracking_no TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS is_arrived BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMPTZ;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkin_updated_at TIMESTAMPTZ;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkin_note TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkin_token TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkin_token_rotated_at TIMESTAMPTZ;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS gift_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (gift_amount >= 0);
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS allocated_table TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS admin_notes TEXT;
@@ -174,3 +184,4 @@ CREATE INDEX IF NOT EXISTS idx_guests_allocated_table ON guests (allocated_table
 CREATE INDEX IF NOT EXISTS idx_guests_invitation_status ON guests (invitation_status);
 CREATE INDEX IF NOT EXISTS idx_guests_cake_status ON guests (cake_status);
 CREATE INDEX IF NOT EXISTS idx_guests_deleted_at ON guests (deleted_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_guests_checkin_token ON guests (checkin_token) WHERE checkin_token IS NOT NULL;
