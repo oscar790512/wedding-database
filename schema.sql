@@ -72,8 +72,16 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users (username);
 CREATE TABLE IF NOT EXISTS table_settings (
   table_name TEXT PRIMARY KEY,
   capacity   INTEGER NOT NULL DEFAULT 12 CHECK (capacity > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE table_settings
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+UPDATE table_settings
+SET created_at = COALESCE(created_at, updated_at, NOW())
+WHERE created_at IS NULL;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security (RLS)
