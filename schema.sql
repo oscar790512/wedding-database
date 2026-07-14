@@ -113,12 +113,16 @@ BEGIN
   END IF;
 
   RETURN QUERY
-  INSERT INTO api_counters AS counters (counter_key, count, created_at, updated_at)
+  INSERT INTO api_counters AS counters ("counter_key", "count", "created_at", "updated_at")
   VALUES (btrim(counter_name), increment_by, NOW(), NOW())
-  ON CONFLICT (counter_key) DO UPDATE
-    SET count = counters.count + EXCLUDED.count,
-        updated_at = NOW()
-  RETURNING counters.counter_key, counters.count, counters.created_at, counters.updated_at;
+  ON CONFLICT ON CONSTRAINT api_counters_pkey DO UPDATE
+    SET "count" = counters."count" + EXCLUDED."count",
+        "updated_at" = NOW()
+  RETURNING
+    counters."counter_key",
+    counters."count",
+    counters."created_at",
+    counters."updated_at";
 END;
 $$;
 
