@@ -81,6 +81,47 @@ CREATE TABLE IF NOT EXISTS table_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ---------------------------------------------------------------------------
+-- api_counters: 後台排程 / 外部整合計數器
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS api_counters (
+  counter_key TEXT PRIMARY KEY,
+  count       INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION increment_api_counter(
+  counter_name TEXT,
+  increment_by INTEGER DEFAULT 1
+)
+RETURNS TABLE (
+  counter_key TEXT,
+  count INTEGER,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF counter_name IS NULL OR btrim(counter_name) = '' THEN
+    RAISE EXCEPTION 'counter_name is required';
+  END IF;
+
+  IF increment_by <= 0 THEN
+    RAISE EXCEPTION 'increment_by must be positive';
+  END IF;
+
+  RETURN QUERY
+  INSERT INTO api_counters AS counters (counter_key, count, created_at, updated_at)
+  VALUES (btrim(counter_name), increment_by, NOW(), NOW())
+  ON CONFLICT (counter_key) DO UPDATE
+    SET count = counters.count + EXCLUDED.count,
+        updated_at = NOW()
+  RETURNING counters.counter_key, counters.count, counters.created_at, counters.updated_at;
+END;
+$$;
+
 ALTER TABLE table_settings
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
@@ -96,6 +137,7 @@ WHERE created_at IS NULL;
 ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE table_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api_counters ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
 -- Migration: need_cake -> need_invitation + invitation_address
