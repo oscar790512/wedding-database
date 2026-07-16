@@ -82,6 +82,20 @@ CREATE TABLE IF NOT EXISTS table_settings (
 );
 
 -- ---------------------------------------------------------------------------
+-- wedding_settings: 公開 RSVP 與婚禮共用設定
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS wedding_settings (
+  id              SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  rsvp_deadline   DATE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO wedding_settings (id)
+VALUES (1)
+ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
 -- api_counters: 後台排程 / 外部整合計數器
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS api_counters (
@@ -142,6 +156,7 @@ ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE table_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_counters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wedding_settings ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
 -- Migration: need_cake -> need_invitation + invitation_address
@@ -172,6 +187,24 @@ ALTER TABLE guests ADD COLUMN IF NOT EXISTS decline_response TEXT CHECK (
   OR decline_response IN ('blessing_only', 'request_cake')
 );
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS blessing_message TEXT;
+
+-- Migration: consolidate the legacy allergy field into the single public
+-- dietary-notes field. The deprecated column remains for API compatibility.
+UPDATE guests
+SET
+  diet_notes = CASE
+    WHEN diet_notes IS NULL OR btrim(diet_notes) = '' THEN btrim(allergy_notes)
+    WHEN btrim(diet_notes) = btrim(allergy_notes) THEN diet_notes
+    ELSE btrim(allergy_notes) || '；' || btrim(diet_notes)
+  END,
+  allergy_notes = NULL
+WHERE allergy_notes IS NOT NULL
+  AND btrim(allergy_notes) <> '';
+
+UPDATE guests
+SET allergy_notes = NULL
+WHERE allergy_notes IS NOT NULL
+  AND btrim(allergy_notes) = '';
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS guest_category TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_status TEXT NOT NULL DEFAULT 'not_required' CHECK (
   invitation_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'received')
