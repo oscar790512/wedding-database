@@ -18,6 +18,7 @@ jobs:
         uses: supabase/setup-cli@v2
         with:
           version: latest
+          github-token: ${{ github.token }}
 
       - name: Link Supabase project
         run: supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
