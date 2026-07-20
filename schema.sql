@@ -2,6 +2,7 @@
 -- PostgreSQL schema for Supabase
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "citext";
 
 -- ---------------------------------------------------------------------------
 -- guests: 賓客 RSVP 與現場管理
@@ -64,12 +65,39 @@ CREATE INDEX IF NOT EXISTS idx_guests_status ON guests (status);
 CREATE TABLE IF NOT EXISTS admin_users (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username       TEXT NOT NULL UNIQUE,
+  display_name   TEXT NOT NULL,
   password_hash  TEXT NOT NULL,
   role           TEXT NOT NULL DEFAULT 'staff'
-                   CHECK (role IN ('admin', 'staff'))
+                   CHECK (role IN ('admin', 'staff')),
+  is_active      BOOLEAN NOT NULL DEFAULT TRUE,
+  token_version  INTEGER NOT NULL DEFAULT 1 CHECK (token_version > 0),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users (username);
+
+-- ---------------------------------------------------------------------------
+-- admin_user_audit_logs: 工作人員帳號管理稽核紀錄
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_user_audit_logs (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_username  TEXT NOT NULL,
+  target_username TEXT NOT NULL,
+  action          TEXT NOT NULL CHECK (
+                    action IN (
+                      'created',
+                      'display_name_updated',
+                      'password_reset',
+                      'deactivated',
+                      'reactivated'
+                    )
+                  ),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_user_audit_logs_created_at
+  ON admin_user_audit_logs (created_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- table_settings: 桌次容量設定
@@ -147,6 +175,34 @@ UPDATE table_settings
 SET created_at = COALESCE(created_at, updated_at, NOW())
 WHERE created_at IS NULL;
 
+-- Existing admin_users rows predate staff account management. Backfill them
+-- before making display_name required so this schema remains idempotent.
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+UPDATE admin_users
+SET display_name = username
+WHERE display_name IS NULL OR btrim(display_name) = '';
+
+ALTER TABLE admin_users ALTER COLUMN display_name SET NOT NULL;
+ALTER TABLE admin_users ALTER COLUMN username TYPE CITEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'admin_users_token_version_check'
+      AND conrelid = 'admin_users'::regclass
+  ) THEN
+    ALTER TABLE admin_users
+      ADD CONSTRAINT admin_users_token_version_check CHECK (token_version > 0);
+  END IF;
+END $$;
+
 -- ---------------------------------------------------------------------------
 -- Row Level Security (RLS)
 -- FastAPI 後端使用 service_role key 存取，會 bypass RLS。
@@ -154,6 +210,7 @@ WHERE created_at IS NULL;
 -- ---------------------------------------------------------------------------
 ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_user_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE table_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_counters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wedding_settings ENABLE ROW LEVEL SECURITY;
