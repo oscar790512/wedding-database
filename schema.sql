@@ -320,4 +320,7 @@ CREATE INDEX IF NOT EXISTS idx_guests_allocated_table ON guests (allocated_table
 CREATE INDEX IF NOT EXISTS idx_guests_invitation_status ON guests (invitation_status);
 CREATE INDEX IF NOT EXISTS idx_guests_cake_status ON guests (cake_status);
 CREATE INDEX IF NOT EXISTS idx_guests_deleted_at ON guests (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_guests_active_created_at ON guests (created_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_guests_active_status_created_at ON guests (status, created_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_guests_active_table_created_at ON guests (allocated_table, created_at) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_guests_checkin_token ON guests (checkin_token) WHERE checkin_token IS NOT NULL;
