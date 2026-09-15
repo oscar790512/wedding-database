@@ -110,6 +110,23 @@ CREATE TABLE IF NOT EXISTS table_settings (
 );
 
 -- ---------------------------------------------------------------------------
+-- table_layout_slots: 桌位圖位置設定
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS table_layout_slots (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  layout_name    TEXT NOT NULL DEFAULT 'default',
+  column_index   INTEGER NOT NULL CHECK (column_index BETWEEN 1 AND 4),
+  position_index INTEGER NOT NULL CHECK (position_index >= 1),
+  table_name     TEXT REFERENCES table_settings(table_name)
+                   ON UPDATE CASCADE
+                   ON DELETE SET NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (layout_name, column_index, position_index),
+  UNIQUE (layout_name, table_name)
+);
+
+-- ---------------------------------------------------------------------------
 -- wedding_settings: 公開 RSVP 與婚禮共用設定
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS wedding_settings (
@@ -171,6 +188,9 @@ $$;
 ALTER TABLE table_settings
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
+ALTER TABLE table_layout_slots
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
 UPDATE table_settings
 SET created_at = COALESCE(created_at, updated_at, NOW())
 WHERE created_at IS NULL;
@@ -212,6 +232,7 @@ ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_user_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE table_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE table_layout_slots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_counters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wedding_settings ENABLE ROW LEVEL SECURITY;
 
