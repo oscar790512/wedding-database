@@ -105,6 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_user_audit_logs_created_at
 CREATE TABLE IF NOT EXISTS table_settings (
   table_name TEXT PRIMARY KEY,
   capacity   INTEGER NOT NULL DEFAULT 12 CHECK (capacity > 0),
+  seat_video_key TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -308,6 +309,41 @@ ALTER TABLE guests ADD COLUMN IF NOT EXISTS allocated_table TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS admin_notes TEXT;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE table_settings ADD COLUMN IF NOT EXISTS seat_video_key TEXT;
+
+UPDATE table_settings
+SET seat_video_key = CASE table_name
+  WHEN '女方家人' THEN 'table-01'
+  WHEN '男方家人' THEN 'table-02'
+  WHEN '小港黃家' THEN 'table-03'
+  WHEN '女方家人2' THEN 'table-04'
+  WHEN '男方家人3' THEN 'table-05'
+  WHEN '男方家人2' THEN 'table-06'
+  WHEN '女方親友' THEN 'table-07'
+  WHEN '女方家人4' THEN 'table-08'
+  WHEN '男方家人5' THEN 'table-09'
+  WHEN '男方家人4' THEN 'table-10'
+  WHEN '女方同事2' THEN 'table-11'
+  WHEN '女方國中同學3' THEN 'table-12'
+  WHEN '男方同事' THEN 'table-13'
+  WHEN '男方長輩好友' THEN 'table-14'
+  WHEN '女方同事3' THEN 'table-15'
+  WHEN '女方國中同學' THEN 'table-16'
+  WHEN '男方同事2' THEN 'table-17'
+  WHEN '男方好友1' THEN 'table-18'
+  WHEN '男方研究所同學' THEN 'table-19'
+  WHEN '女方大學同學' THEN 'table-20'
+  WHEN '男方同事3' THEN 'table-21'
+  WHEN '男方好友2' THEN 'table-22'
+  WHEN '預備桌' THEN 'table-23'
+  WHEN '女方同事' THEN 'table-24'
+  WHEN '男方同事6' THEN 'table-25'
+  WHEN '男方同事4' THEN 'table-26'
+  WHEN '男方同事5' THEN 'table-27'
+  WHEN '主桌' THEN 'main-table'
+  ELSE seat_video_key
+END
+WHERE seat_video_key IS NULL;
 
 UPDATE guests
 SET shipping_address = invitation_address
