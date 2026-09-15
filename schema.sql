@@ -345,6 +345,42 @@ SET seat_video_key = CASE table_name
 END
 WHERE seat_video_key IS NULL;
 
+UPDATE table_settings AS settings
+SET seat_video_key = CASE
+  WHEN slots.column_index = 1 AND slots.position_index = 1 THEN 'table-01'
+  WHEN slots.column_index = 1 AND slots.position_index = 2 THEN 'table-03'
+  WHEN slots.column_index = 1 AND slots.position_index = 3 THEN 'table-07'
+  WHEN slots.column_index = 1 AND slots.position_index = 4 THEN 'table-11'
+  WHEN slots.column_index = 1 AND slots.position_index = 5 THEN 'table-15'
+  WHEN slots.column_index = 1 AND slots.position_index = 6 THEN 'table-19'
+  WHEN slots.column_index = 1 AND slots.position_index = 7 THEN 'table-23'
+  WHEN slots.column_index = 2 AND slots.position_index = 1 THEN 'table-04'
+  WHEN slots.column_index = 2 AND slots.position_index = 2 THEN 'table-08'
+  WHEN slots.column_index = 2 AND slots.position_index = 3 THEN 'table-12'
+  WHEN slots.column_index = 2 AND slots.position_index = 4 THEN 'table-16'
+  WHEN slots.column_index = 2 AND slots.position_index = 5 THEN 'table-20'
+  WHEN slots.column_index = 2 AND slots.position_index = 6 THEN 'table-24'
+  WHEN slots.column_index = 2 AND slots.position_index = 7 THEN 'table-27'
+  WHEN slots.column_index = 3 AND slots.position_index = 1 THEN 'table-05'
+  WHEN slots.column_index = 3 AND slots.position_index = 2 THEN 'table-09'
+  WHEN slots.column_index = 3 AND slots.position_index = 3 THEN 'table-13'
+  WHEN slots.column_index = 3 AND slots.position_index = 4 THEN 'table-17'
+  WHEN slots.column_index = 3 AND slots.position_index = 5 THEN 'table-21'
+  WHEN slots.column_index = 3 AND slots.position_index = 6 THEN 'table-25'
+  WHEN slots.column_index = 4 AND slots.position_index = 1 THEN 'table-02'
+  WHEN slots.column_index = 4 AND slots.position_index = 2 THEN 'table-06'
+  WHEN slots.column_index = 4 AND slots.position_index = 3 THEN 'table-10'
+  WHEN slots.column_index = 4 AND slots.position_index = 4 THEN 'table-14'
+  WHEN slots.column_index = 4 AND slots.position_index = 5 THEN 'table-18'
+  WHEN slots.column_index = 4 AND slots.position_index = 6 THEN 'table-22'
+  WHEN slots.column_index = 4 AND slots.position_index = 7 THEN 'table-26'
+  ELSE settings.seat_video_key
+END
+FROM table_layout_slots AS slots
+WHERE settings.table_name = slots.table_name
+  AND slots.layout_name = 'default'
+  AND settings.seat_video_key IS NULL;
+
 UPDATE guests
 SET shipping_address = invitation_address
 WHERE status = 'decline'
