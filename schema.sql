@@ -104,6 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_user_audit_logs_created_at
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS table_settings (
   table_name TEXT PRIMARY KEY,
+  table_number INTEGER CHECK (table_number IS NULL OR table_number > 0),
   capacity   INTEGER NOT NULL DEFAULT 12 CHECK (capacity > 0),
   seat_video_key TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
