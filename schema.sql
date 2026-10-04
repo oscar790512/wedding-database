@@ -111,6 +111,12 @@ CREATE TABLE IF NOT EXISTS table_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE table_settings
+  ADD COLUMN IF NOT EXISTS table_number INTEGER
+  CHECK (table_number IS NULL OR table_number > 0);
+
+NOTIFY pgrst, 'reload schema';
+
 -- ---------------------------------------------------------------------------
 -- table_layout_slots: 桌位圖位置設定
 -- ---------------------------------------------------------------------------
