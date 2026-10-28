@@ -6,7 +6,8 @@ BEGIN
     RAISE EXCEPTION 'Email delivery tables were not created';
   END IF;
   IF to_regprocedure('public.enqueue_wedding_email(uuid,text,text,text,jsonb,jsonb)') IS NULL
-     OR to_regprocedure('public.claim_wedding_email(uuid,text,integer,double precision)') IS NULL THEN
+     OR to_regprocedure('public.claim_wedding_email(uuid,text,integer,double precision)') IS NULL
+     OR to_regprocedure('public.claim_wedding_email_v2(uuid,text,integer,double precision,uuid)') IS NULL THEN
     RAISE EXCEPTION 'Email queue functions were not created';
   END IF;
   IF EXISTS (SELECT FROM pg_class WHERE oid IN ('public.wedding_email_batches'::regclass, 'public.wedding_email_deliveries'::regclass, 'public.wedding_email_attempts'::regclass) AND NOT relrowsecurity) THEN
@@ -15,11 +16,14 @@ BEGIN
   IF has_table_privilege('anon', 'wedding_email_deliveries', 'SELECT')
      OR has_table_privilege('authenticated', 'wedding_email_deliveries', 'SELECT')
      OR has_function_privilege('authenticated', 'claim_wedding_email(uuid,text,integer,double precision)', 'EXECUTE')
-     OR has_function_privilege('anon', 'enqueue_wedding_email(uuid,text,text,text,jsonb,jsonb)', 'EXECUTE') THEN
+     OR has_function_privilege('anon', 'enqueue_wedding_email(uuid,text,text,text,jsonb,jsonb)', 'EXECUTE')
+     OR has_function_privilege('anon', 'claim_wedding_email_v2(uuid,text,integer,double precision,uuid)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'claim_wedding_email_v2(uuid,text,integer,double precision,uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Browser roles must not access private delivery data or queue functions';
   END IF;
   IF NOT has_table_privilege('service_role', 'wedding_email_deliveries', 'SELECT')
-     OR NOT has_function_privilege('service_role', 'claim_wedding_email(uuid,text,integer,double precision)', 'EXECUTE') THEN
+     OR NOT has_function_privilege('service_role', 'claim_wedding_email(uuid,text,integer,double precision)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'claim_wedding_email_v2(uuid,text,integer,double precision,uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Backend service role cannot manage deliveries';
   END IF;
   IF NOT EXISTS (SELECT FROM wedding_email_deliveries WHERE id='20000000-0000-4000-8000-000000000001'
