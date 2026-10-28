@@ -49,7 +49,7 @@ jobs:
       PGDATABASE: wedding_migration_test
       PGUSER: postgres
       PGPASSWORD: postgres
-      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wedding_migration_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wedding_migration_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v2
