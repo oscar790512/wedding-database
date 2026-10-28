@@ -1,0 +1,448 @@
+-- Wedding RSVP & Admin System
+-- PostgreSQL schema for Supabase
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "citext";
+
+-- ---------------------------------------------------------------------------
+-- guests: 賓客 RSVP 與現場管理
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS guests (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT NOT NULL,
+  phone           TEXT NOT NULL,
+  email           TEXT,
+  status          TEXT NOT NULL DEFAULT 'undecided'
+                    CHECK (status IN ('attend', 'decline', 'undecided')),
+  total_adults    INTEGER NOT NULL DEFAULT 0 CHECK (total_adults >= 0),
+  total_children  INTEGER NOT NULL DEFAULT 0 CHECK (total_children >= 0),
+  actual_adults   INTEGER CHECK (actual_adults IS NULL OR actual_adults >= 0),
+  actual_children INTEGER CHECK (actual_children IS NULL OR actual_children >= 0),
+  vegetarian_count INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_count >= 0),
+  vegetarian_adults INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_adults >= 0),
+  vegetarian_children INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_children >= 0),
+  allergy_notes   TEXT,
+  child_seats     INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0),
+  diet_notes      TEXT,
+  need_invitation BOOLEAN NOT NULL DEFAULT FALSE,
+  invitation_address TEXT,
+  decline_response TEXT CHECK (
+    decline_response IS NULL
+    OR decline_response IN ('blessing_only', 'request_cake')
+  ),
+  blessing_message TEXT,
+  guest_category  TEXT,
+  invitation_status TEXT NOT NULL DEFAULT 'not_required'
+                    CHECK (invitation_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'received')),
+  cake_status     TEXT NOT NULL DEFAULT 'not_required'
+                    CHECK (cake_status IN ('not_required', 'pending_pickup', 'pending_address', 'pending_send', 'sent', 'pickup')),
+  shipping_recipient TEXT,
+  shipping_phone  TEXT,
+  shipping_address TEXT,
+  shipping_date   DATE,
+  tracking_no     TEXT,
+  is_arrived      BOOLEAN NOT NULL DEFAULT FALSE,
+  arrived_at      TIMESTAMPTZ,
+  checkin_updated_at TIMESTAMPTZ,
+  checkin_note    TEXT,
+  checkin_token   TEXT UNIQUE,
+  checkin_token_rotated_at TIMESTAMPTZ,
+  gift_amount     NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (gift_amount >= 0),
+  allocated_table TEXT,
+  admin_notes     TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at      TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_guests_phone ON guests (phone);
+CREATE INDEX IF NOT EXISTS idx_guests_name ON guests (name);
+CREATE INDEX IF NOT EXISTS idx_guests_status ON guests (status);
+
+-- ---------------------------------------------------------------------------
+-- admin_users: 管理端登入帳號
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_users (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  username       TEXT NOT NULL UNIQUE,
+  display_name   TEXT NOT NULL,
+  password_hash  TEXT NOT NULL,
+  role           TEXT NOT NULL DEFAULT 'staff'
+                   CHECK (role IN ('admin', 'staff')),
+  is_active      BOOLEAN NOT NULL DEFAULT TRUE,
+  token_version  INTEGER NOT NULL DEFAULT 1 CHECK (token_version > 0),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users (username);
+
+-- ---------------------------------------------------------------------------
+-- admin_user_audit_logs: 工作人員帳號管理稽核紀錄
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_user_audit_logs (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_username  TEXT NOT NULL,
+  target_username TEXT NOT NULL,
+  action          TEXT NOT NULL CHECK (
+                    action IN (
+                      'created',
+                      'display_name_updated',
+                      'password_reset',
+                      'deactivated',
+                      'reactivated'
+                    )
+                  ),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_user_audit_logs_created_at
+  ON admin_user_audit_logs (created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- table_settings: 桌次容量設定
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS table_settings (
+  table_name TEXT PRIMARY KEY,
+  table_number INTEGER CHECK (table_number IS NULL OR table_number > 0),
+  capacity   INTEGER NOT NULL DEFAULT 12 CHECK (capacity > 0),
+  seat_video_key TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE table_settings
+  ADD COLUMN IF NOT EXISTS table_number INTEGER
+  CHECK (table_number IS NULL OR table_number > 0);
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- table_layout_slots: 桌位圖位置設定
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS table_layout_slots (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  layout_name    TEXT NOT NULL DEFAULT 'default',
+  column_index   INTEGER NOT NULL CHECK (column_index BETWEEN 1 AND 4),
+  position_index INTEGER NOT NULL CHECK (position_index >= 1),
+  table_name     TEXT REFERENCES table_settings(table_name)
+                   ON UPDATE CASCADE
+                   ON DELETE SET NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (layout_name, column_index, position_index),
+  UNIQUE (layout_name, table_name)
+);
+
+-- ---------------------------------------------------------------------------
+-- wedding_settings: 公開 RSVP 與婚禮共用設定
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS wedding_settings (
+  id              SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  rsvp_deadline   DATE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO wedding_settings (id)
+VALUES (1)
+ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- api_counters: 後台排程 / 外部整合計數器
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS api_counters (
+  counter_key TEXT PRIMARY KEY,
+  count       INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION increment_api_counter(
+  counter_name TEXT,
+  increment_by INTEGER DEFAULT 1
+)
+RETURNS TABLE (
+  counter_key TEXT,
+  count INTEGER,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF counter_name IS NULL OR btrim(counter_name) = '' THEN
+    RAISE EXCEPTION 'counter_name is required';
+  END IF;
+
+  IF increment_by <= 0 THEN
+    RAISE EXCEPTION 'increment_by must be positive';
+  END IF;
+
+  RETURN QUERY
+  INSERT INTO api_counters AS counters ("counter_key", "count", "created_at", "updated_at")
+  VALUES (btrim(counter_name), increment_by, NOW(), NOW())
+  ON CONFLICT ON CONSTRAINT api_counters_pkey DO UPDATE
+    SET "count" = counters."count" + EXCLUDED."count",
+        "updated_at" = NOW()
+  RETURNING
+    counters."counter_key",
+    counters."count",
+    counters."created_at",
+    counters."updated_at";
+END;
+$$;
+
+ALTER TABLE table_settings
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE table_layout_slots
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+UPDATE table_settings
+SET created_at = COALESCE(created_at, updated_at, NOW())
+WHERE created_at IS NULL;
+
+-- Existing admin_users rows predate staff account management. Backfill them
+-- before making display_name required so this schema remains idempotent.
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+UPDATE admin_users
+SET display_name = username
+WHERE display_name IS NULL OR btrim(display_name) = '';
+
+ALTER TABLE admin_users ALTER COLUMN display_name SET NOT NULL;
+ALTER TABLE admin_users ALTER COLUMN username TYPE CITEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'admin_users_token_version_check'
+      AND conrelid = 'admin_users'::regclass
+  ) THEN
+    ALTER TABLE admin_users
+      ADD CONSTRAINT admin_users_token_version_check CHECK (token_version > 0);
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security (RLS)
+-- FastAPI 後端使用 service_role key 存取，會 bypass RLS。
+-- 啟用 RLS 可阻擋 anon / authenticated 透過 PostgREST 直接讀寫資料表。
+-- ---------------------------------------------------------------------------
+ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_user_audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE table_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE table_layout_slots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api_counters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wedding_settings ENABLE ROW LEVEL SECURITY;
+
+-- ---------------------------------------------------------------------------
+-- Migration: need_cake -> need_invitation + invitation_address
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'guests'
+      AND column_name = 'need_cake'
+  ) THEN
+    ALTER TABLE guests RENAME COLUMN need_cake TO need_invitation;
+  END IF;
+END $$;
+
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_address TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS child_seats INTEGER NOT NULL DEFAULT 0 CHECK (child_seats >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS actual_adults INTEGER CHECK (actual_adults IS NULL OR actual_adults >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS actual_children INTEGER CHECK (actual_children IS NULL OR actual_children >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS vegetarian_count INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_count >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS vegetarian_adults INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_adults >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS vegetarian_children INTEGER NOT NULL DEFAULT 0 CHECK (vegetarian_children >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS allergy_notes TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS decline_response TEXT CHECK (
+  decline_response IS NULL
+  OR decline_response IN ('blessing_only', 'request_cake')
+);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS blessing_message TEXT;
+
+-- Migration: consolidate the legacy allergy field into the single public
+-- dietary-notes field. The deprecated column remains for API compatibility.
+UPDATE guests
+SET
+  diet_notes = CASE
+    WHEN diet_notes IS NULL OR btrim(diet_notes) = '' THEN btrim(allergy_notes)
+    WHEN btrim(diet_notes) = btrim(allergy_notes) THEN diet_notes
+    ELSE btrim(allergy_notes) || '；' || btrim(diet_notes)
+  END,
+  allergy_notes = NULL
+WHERE allergy_notes IS NOT NULL
+  AND btrim(allergy_notes) <> '';
+
+UPDATE guests
+SET allergy_notes = NULL
+WHERE allergy_notes IS NOT NULL
+  AND btrim(allergy_notes) = '';
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS guest_category TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_status TEXT NOT NULL DEFAULT 'not_required' CHECK (
+  invitation_status IN ('not_required', 'pending_address', 'pending_send', 'sent', 'received')
+);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS cake_status TEXT NOT NULL DEFAULT 'not_required';
+ALTER TABLE guests DROP CONSTRAINT IF EXISTS guests_cake_status_check;
+ALTER TABLE guests ADD CONSTRAINT guests_cake_status_check CHECK (
+  cake_status IN ('not_required', 'pending_pickup', 'pending_address', 'pending_send', 'sent', 'pickup')
+);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_recipient TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_phone TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_address TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS shipping_date DATE;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS tracking_no TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS is_arrived BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMPTZ;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkin_updated_at TIMESTAMPTZ;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkin_note TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkin_token TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkin_token_rotated_at TIMESTAMPTZ;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS gift_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (gift_amount >= 0);
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS allocated_table TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS admin_notes TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE table_settings ADD COLUMN IF NOT EXISTS seat_video_key TEXT;
+
+UPDATE table_settings
+SET seat_video_key = CASE table_name
+  WHEN '女方家人A' THEN 'table-01'
+  WHEN '男方家人A' THEN 'table-02'
+  WHEN '女方親友A' THEN 'table-03'
+  WHEN '女方家人B' THEN 'table-04'
+  WHEN '男方家人C' THEN 'table-05'
+  WHEN '男方家人B' THEN 'table-06'
+  WHEN '新娘朋友A' THEN 'table-07'
+  WHEN '女方家人C' THEN 'table-08'
+  WHEN '男方家人E' THEN 'table-09'
+  WHEN '男方家人D' THEN 'table-10'
+  WHEN '新娘同事A' THEN 'table-11'
+  WHEN '新娘國中同學A' THEN 'table-12'
+  WHEN '新郎同事A' THEN 'table-13'
+  WHEN '新娘同事B' THEN 'table-15'
+  WHEN '新娘國中同學B' THEN 'table-16'
+  WHEN '新郎同事B' THEN 'table-17'
+  WHEN '新郎好友A' THEN 'table-18'
+  WHEN '新郎研究所同學' THEN 'table-19'
+  WHEN '新娘大學同學' THEN 'table-20'
+  WHEN '新郎同事C' THEN 'table-21'
+  WHEN '新郎好友B' THEN 'table-22'
+  WHEN '新娘朋友B' THEN 'table-24'
+  WHEN '新郎同事E' THEN 'table-25'
+  WHEN '新郎同事D' THEN 'table-26'
+  WHEN '女方家人' THEN 'table-01'
+  WHEN '男方家人' THEN 'table-02'
+  WHEN '小港黃家' THEN 'table-03'
+  WHEN '女方家人2' THEN 'table-04'
+  WHEN '男方家人3' THEN 'table-05'
+  WHEN '男方家人2' THEN 'table-06'
+  WHEN '女方親友' THEN 'table-07'
+  WHEN '女方家人4' THEN 'table-08'
+  WHEN '男方家人5' THEN 'table-09'
+  WHEN '男方家人4' THEN 'table-10'
+  WHEN '女方同事2' THEN 'table-11'
+  WHEN '女方國中同學3' THEN 'table-12'
+  WHEN '男方同事' THEN 'table-13'
+  WHEN '男方長輩好友' THEN 'table-14'
+  WHEN '女方同事3' THEN 'table-15'
+  WHEN '女方國中同學' THEN 'table-16'
+  WHEN '男方同事2' THEN 'table-17'
+  WHEN '男方好友1' THEN 'table-18'
+  WHEN '男方研究所同學' THEN 'table-19'
+  WHEN '女方大學同學' THEN 'table-20'
+  WHEN '男方同事3' THEN 'table-21'
+  WHEN '男方好友2' THEN 'table-22'
+  WHEN '預備桌' THEN 'table-23'
+  WHEN '女方同事' THEN 'table-24'
+  WHEN '男方同事6' THEN 'table-25'
+  WHEN '男方同事4' THEN 'table-26'
+  WHEN '主桌' THEN 'main-table'
+  ELSE seat_video_key
+END
+WHERE seat_video_key IS NULL;
+
+UPDATE table_settings AS settings
+SET seat_video_key = CASE
+  WHEN slots.column_index = 1 AND slots.position_index = 1 THEN 'table-01'
+  WHEN slots.column_index = 1 AND slots.position_index = 2 THEN 'table-03'
+  WHEN slots.column_index = 1 AND slots.position_index = 3 THEN 'table-07'
+  WHEN slots.column_index = 1 AND slots.position_index = 4 THEN 'table-11'
+  WHEN slots.column_index = 1 AND slots.position_index = 5 THEN 'table-15'
+  WHEN slots.column_index = 1 AND slots.position_index = 6 THEN 'table-19'
+  WHEN slots.column_index = 1 AND slots.position_index = 7 THEN 'table-23'
+  WHEN slots.column_index = 2 AND slots.position_index = 1 THEN 'table-04'
+  WHEN slots.column_index = 2 AND slots.position_index = 2 THEN 'table-08'
+  WHEN slots.column_index = 2 AND slots.position_index = 3 THEN 'table-12'
+  WHEN slots.column_index = 2 AND slots.position_index = 4 THEN 'table-16'
+  WHEN slots.column_index = 2 AND slots.position_index = 5 THEN 'table-20'
+  WHEN slots.column_index = 2 AND slots.position_index = 6 THEN 'table-24'
+  WHEN slots.column_index = 3 AND slots.position_index = 1 THEN 'table-05'
+  WHEN slots.column_index = 3 AND slots.position_index = 2 THEN 'table-09'
+  WHEN slots.column_index = 3 AND slots.position_index = 3 THEN 'table-13'
+  WHEN slots.column_index = 3 AND slots.position_index = 4 THEN 'table-17'
+  WHEN slots.column_index = 3 AND slots.position_index = 5 THEN 'table-21'
+  WHEN slots.column_index = 3 AND slots.position_index = 6 THEN 'table-25'
+  WHEN slots.column_index = 4 AND slots.position_index = 1 THEN 'table-02'
+  WHEN slots.column_index = 4 AND slots.position_index = 2 THEN 'table-06'
+  WHEN slots.column_index = 4 AND slots.position_index = 3 THEN 'table-10'
+  WHEN slots.column_index = 4 AND slots.position_index = 4 THEN 'table-14'
+  WHEN slots.column_index = 4 AND slots.position_index = 5 THEN 'table-18'
+  WHEN slots.column_index = 4 AND slots.position_index = 6 THEN 'table-22'
+  WHEN slots.column_index = 4 AND slots.position_index = 7 THEN 'table-26'
+  ELSE settings.seat_video_key
+END
+FROM table_layout_slots AS slots
+WHERE settings.table_name = slots.table_name
+  AND slots.layout_name = 'default'
+  AND settings.seat_video_key IS NULL;
+
+UPDATE guests
+SET shipping_address = invitation_address
+WHERE status = 'decline'
+  AND decline_response = 'request_cake'
+  AND shipping_address IS NULL
+  AND invitation_address IS NOT NULL;
+
+UPDATE guests
+SET cake_status = CASE
+  WHEN shipping_address IS NULL THEN 'pending_address'
+  ELSE 'pending_send'
+END
+WHERE status = 'decline'
+  AND decline_response = 'request_cake'
+  AND cake_status = 'not_required';
+
+UPDATE guests
+SET cake_status = 'pending_pickup'
+WHERE status = 'attend'
+  AND cake_status = 'not_required';
+
+UPDATE guests
+SET vegetarian_count = vegetarian_adults + vegetarian_children
+WHERE vegetarian_count = 0
+  AND (vegetarian_adults > 0 OR vegetarian_children > 0);
+
+CREATE INDEX IF NOT EXISTS idx_guests_guest_category ON guests (guest_category);
+CREATE INDEX IF NOT EXISTS idx_guests_email ON guests (email);
+CREATE INDEX IF NOT EXISTS idx_guests_allocated_table ON guests (allocated_table);
+CREATE INDEX IF NOT EXISTS idx_guests_invitation_status ON guests (invitation_status);
+CREATE INDEX IF NOT EXISTS idx_guests_cake_status ON guests (cake_status);
+CREATE INDEX IF NOT EXISTS idx_guests_deleted_at ON guests (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_guests_active_created_at ON guests (created_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_guests_active_status_created_at ON guests (status, created_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_guests_active_table_created_at ON guests (allocated_table, created_at) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_guests_checkin_token ON guests (checkin_token) WHERE checkin_token IS NOT NULL;

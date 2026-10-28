@@ -1,0 +1,5 @@
+# Local CLI identifier; each deployment links to its environment's project ref.
+project_id = "wedding-database"
+
+[db]
+major_version = 17

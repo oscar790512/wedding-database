@@ -18,9 +18,66 @@ on:
 permissions:
   contents: read
 
+# Never interrupt a running migration or race two deployments.
+concurrency:
+  group: wedding-database-deployment
+  cancel-in-progress: false
+
 jobs:
+  test-migrations:
+    name: Verify migrations (${{ matrix.database_state }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        database_state: [fresh, manually-applied-email]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wedding_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGDATABASE: wedding_migration_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wedding_migration_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v2
+        with:
+          version: latest
+          github-token: ${{ github.token }}
+      - name: Create Supabase roles in disposable test database
+        run: psql -X -v ON_ERROR_STOP=1 -c 'CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;'
+      - name: Simulate the environment that already applied SQL manually
+        if: matrix.database_state == 'manually-applied-email'
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f schema.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261026000000_wedding_email.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/seed.sql
+      - name: Apply versioned migrations
+        run: supabase db push --db-url "$TEST_DATABASE_URL" --yes
+      - name: Seed fresh database for preservation checks
+        if: matrix.database_state == 'fresh'
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/seed.sql
+      - name: Re-deploy without replaying applied migrations
+        run: supabase db push --db-url "$TEST_DATABASE_URL" --yes
+      - name: Verify schema, privacy, migration history and retained delivery
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/assertions.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/history.sql
   deploy-staging:
     name: Deploy staging database
+    needs: test-migrations
     if: ${{ github.event_name == 'push' || github.event.inputs.target == 'staging' || github.event.inputs.target == 'production' }}
     runs-on: ubuntu-latest
     environment: staging
@@ -59,8 +116,8 @@ jobs:
       - name: Link staging Supabase project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
-      - name: Apply schema.sql
-        run: supabase db query --file schema.sql --linked
+      - name: Apply pending database migrations
+        run: supabase db push --linked --yes
 
   deploy-production:
     name: Deploy production database
@@ -103,5 +160,5 @@ jobs:
       - name: Link production Supabase project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
-      - name: Apply schema.sql
-        run: supabase db query --file schema.sql --linked
+      - name: Apply pending database migrations
+        run: supabase db push --linked --yes
