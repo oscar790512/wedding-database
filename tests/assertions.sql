@@ -33,6 +33,16 @@ BEGIN
      OR (SELECT content->>'subject' FROM wedding_email_batches WHERE id='10000000-0000-4000-8000-000000000001') <> 'Original reviewed subject' THEN
     RAISE EXCEPTION 'Migration must preserve existing sent emails, QR tokens, template snapshots and attempts';
   END IF;
+  IF to_regclass('public.wedding_email_relay_requests') IS NULL
+     OR to_regprocedure('public.reserve_wedding_email_relay(uuid,text,text,integer,double precision)') IS NULL
+     OR NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.wedding_email_relay_requests'::regclass)
+     OR has_table_privilege('anon','wedding_email_relay_requests','SELECT')
+     OR has_table_privilege('authenticated','wedding_email_relay_requests','SELECT')
+     OR has_function_privilege('anon','reserve_wedding_email_relay(uuid,text,text,integer,double precision)','EXECUTE')
+     OR has_function_privilege('authenticated','reserve_wedding_email_relay(uuid,text,text,integer,double precision)','EXECUTE')
+     OR NOT has_function_privilege('service_role','reserve_wedding_email_relay(uuid,text,text,integer,double precision)','EXECUTE') THEN
+    RAISE EXCEPTION 'Relay receipts and reservation must be private and usable by service role';
+  END IF;
   IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_schema='public' AND table_name='table_settings' AND column_name='table_number') THEN
     RAISE EXCEPTION 'Existing table-number migration was lost';
   END IF;

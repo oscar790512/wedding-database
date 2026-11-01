@@ -15,12 +15,14 @@
 
 ## 首次銜接既有環境
 
-目前有四個版本：
+目前有五個版本：
 
 1. `20260620000000_baseline.sql`：切換版本化部署時的既有 `schema.sql` 快照。保留原本可重複執行的建表、欄位檢查與資料轉換邏輯，供既有環境銜接與新環境初始化。
 2. `20261004000000_add_table_number_to_table_settings.sql`：原本桌號 migration，移至標準目錄與版本格式。
 3. `20261026000000_wedding_email.sql`：Email 批次、寄送紀錄、嘗試紀錄與兩個排程函式。
 4. `20261028000000_retryable_email_claim.sql`：以固定 request ID 領取 Email 任務，連線回覆遺失後可安全重試，不會多領一位賓客或多扣額度。須先部署此版本，再部署使用 v2 函式的 backend。
+
+5. `20261101000000_wedding_email_relay.sql`：Staging HTTPS 代寄的私有請求紀錄與一次性寄送權；直接寄送與代寄共用帳號額度／間隔，保留既有批次、寄送紀錄與 claim v1/v2。須先部署此版本，再啟用 backend 的 EMAIL_RELAY_ENABLED。
 
 已經在 SQL Editor 手動建立 Email 表的測試環境，初次 `db push` 會以 `IF NOT EXISTS` 與 `CREATE OR REPLACE FUNCTION` 銜接並寫入版本歷史；保留既有資料和寄送結果。尚未建立的正式環境則會自動新增。之後重複部署會略過已記錄的版本。
 
